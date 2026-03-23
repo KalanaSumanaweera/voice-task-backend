@@ -45,8 +45,8 @@ def get_google_credentials():
 app = FastAPI()
 
 origins = [
-    "https://yourusername.github.io",  # GitHub Pages domain
-    "https://your-netlify-app.netlify.app",  # if using Netlify
+    "https://kalanasumanaweera.github.io/voice-task-frontend/",  # GitHub Pages domain
+    # "https://your-netlify-app.netlify.app",  # if using Netlify
     "http://localhost:8000",  # for local testing
     "http://localhost:5500",  # if using VS Code Live Server
 ]
