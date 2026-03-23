@@ -7,6 +7,7 @@ import google.generativeai as genai
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from google.auth.transport.requests import Request
+from fastapi.middleware.cors import CORSMiddleware
 
 # Load environment variables
 load_dotenv()
@@ -42,6 +43,21 @@ def get_google_credentials():
 
 # FastAPI app
 app = FastAPI()
+
+origins = [
+    "https://yourusername.github.io",  # GitHub Pages domain
+    "https://your-netlify-app.netlify.app",  # if using Netlify
+    "http://localhost:8000",  # for local testing
+    "http://localhost:5500",  # if using VS Code Live Server
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,  # or ["*"] for development, but restrict later
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 class VoiceText(BaseModel):
     text: str
