@@ -1,6 +1,3 @@
-
-GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")  # or mixtral-8x7b-32768, etc.
-
 import os
 import json
 from datetime import datetime, timezone, timedelta
