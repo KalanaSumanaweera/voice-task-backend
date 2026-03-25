@@ -1,3 +1,6 @@
+
+GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")  # or mixtral-8x7b-32768, etc.
+
 import os
 import json
 from datetime import datetime, timezone, timedelta
@@ -42,7 +45,6 @@ def get_google_credentials():
         creds.refresh(Request())
     return creds
 
-# ---------- FastAPI ----------
 app = FastAPI()
 origins = [
     "https://kalanasumanaweera.github.io",
@@ -97,7 +99,10 @@ async def process_task(item: VoiceText):
         current_date = now.strftime("%Y-%m-%d")
         current_time = now.strftime("%H:%M:%S")
 
-        # ---------- 1. Extract intent and details using Groq ----------
+        # Compute tomorrow's date for use in examples
+        tomorrow = (datetime.fromisoformat(current_date) + timedelta(days=1)).strftime("%Y-%m-%d")
+
+        # ---------- DYNAMIC PROMPT with computed dates ----------
         system_message = f"""
 You are a smart assistant that extracts task/event details from user input.
 Today is {current_date} in Sri Lanka (UTC+5:30). The current time is {current_time}.
@@ -118,38 +123,33 @@ You must output **only a JSON object** with these fields:
 - "labels": (list of strings or null) any labels/projects mentioned, else null.
 - "language": (string) the language of the user's input, either "si" (Sinhala) or "en" (English).
 
-Interpretation rules:
-- Use today's date ({current_date}) as the reference for relative words like "today", "tomorrow", "next Friday".
-- All times are in Sri Lanka time (UTC+5:30). Convert them to UTC for start_datetime (e.g., 9am Sri Lanka = 03:30Z).
-- For "find_slot", we will later query your calendar and pick a free time on the specified date (or today if none). If no date is provided, default to tomorrow.
-- If a date is mentioned but no time, set intent to "find_slot" **unless** the user indicates they only want a reminder (e.g., "remind me", "just remind", "don't schedule").
-- For "query", extract the date from the user's request (e.g., "today", "tomorrow", "March 25"). If no date, default to today.
-- Determine the language from the user's text: if it contains Sinhala characters, set language to "si", else "en".
+Date/Time Calculation:
+- Use today's date {current_date} as the base.
+- For "tomorrow", add 1 day to {current_date} → {tomorrow}.
+- For "next Friday", compute the next Friday after {current_date}.
+- For any relative term, calculate the exact date.
+- All times are in Sri Lanka time (UTC+5:30). Convert to UTC for start_datetime (e.g., 9am Sri Lanka = 03:30Z).
+- If only a date is mentioned, set "date" to that date, and leave "start_datetime" null.
+- If a specific time is mentioned (e.g., "at 9am"), set "start_datetime" to the full datetime in UTC.
 
-Examples:
+Examples (using today's date {current_date}):
 
 1. "I have a meeting tomorrow at 9.00 am"
-   → {{"content": "Meeting", "intent": "schedule", "date": null, "start_datetime": "2026-03-24T03:30:00Z", "duration_minutes": null, "preferred_time": null, "description": "I have a meeting", "labels": null, "language": "en"}}
+   → Output: {{"content": "Meeting", "intent": "schedule", "date": null, "start_datetime": "{tomorrow}T03:30:00Z", "duration_minutes": null, "preferred_time": null, "description": "I have a meeting", "labels": null, "language": "en"}}
 
 2. "හෙට සුදුසු වෙලාවක් බලලා මට ගෙදර වැඩ කරන්න දාන්න"
-   → {{"content": "ගෙදර වැඩ", "intent": "find_slot", "date": "2026-03-24", "start_datetime": null, "duration_minutes": 60, "preferred_time": null, "description": null, "labels": null, "language": "si"}}
+   → Output: {{"content": "ගෙදර වැඩ", "intent": "find_slot", "date": "{tomorrow}", "start_datetime": null, "duration_minutes": 60, "preferred_time": null, "description": null, "labels": null, "language": "si"}}
 
-3. "හෙට මට පාඩම් කරන්න ඕනි."
-   → {{"content": "පාඩම් කරන්න", "intent": "find_slot", "date": "2026-03-24", "start_datetime": null, "duration_minutes": 60, "preferred_time": null, "description": null, "labels": null, "language": "si"}}
+3. "Buy milk tomorrow"
+   → Output: {{"content": "Buy milk", "intent": "find_slot", "date": "{tomorrow}", "start_datetime": null, "duration_minutes": 60, "preferred_time": null, "description": null, "labels": null, "language": "en"}}
 
-4. "Buy milk tomorrow"
-   → {{"content": "Buy milk", "intent": "find_slot", "date": "2026-03-24", "start_datetime": null, "duration_minutes": 60, "preferred_time": null, "description": null, "labels": null, "language": "en"}}
+4. "What are my plans today?"
+   → Output: {{"content": null, "intent": "query", "date": "{current_date}", "start_datetime": null, "duration_minutes": null, "preferred_time": null, "description": null, "labels": null, "language": "en"}}
 
-5. "What are my plans today?"
-   → {{"content": null, "intent": "query", "date": "{current_date}", "start_datetime": null, "duration_minutes": null, "preferred_time": null, "description": null, "labels": null, "language": "en"}}
+5. "අද මගේ සැලසුම් මොනවාද?"
+   → Output: {{"content": null, "intent": "query", "date": "{current_date}", "start_datetime": null, "duration_minutes": null, "preferred_time": null, "description": null, "labels": null, "language": "si"}}
 
-6. "අද මගේ සැලසුම් මොනවාද?"
-   → {{"content": null, "intent": "query", "date": "{current_date}", "start_datetime": null, "duration_minutes": null, "preferred_time": null, "description": null, "labels": null, "language": "si"}}
-
-7. "Show me tasks for tomorrow"
-   → {{"content": null, "intent": "query", "date": "2026-03-24", "start_datetime": null, "duration_minutes": null, "preferred_time": null, "description": null, "labels": null, "language": "en"}}
-
-Now, process the user's text and output only the JSON object (no other text).
+Now, process the user's text and output only the JSON object (no other text). Ensure dates are correctly computed based on today's date {current_date}.
 """
 
         user_message = item.text
@@ -162,7 +162,6 @@ Now, process the user's text and output only the JSON object (no other text).
             ],
             temperature=0.1,
             max_tokens=1024,
-            response_format={"type": "json_object"}  # if model supports it, else we'll parse
         )
 
         task_data_str = response.choices[0].message.content.strip()
